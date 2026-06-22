@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(timeout 60 python example.py)",
+      "Bash(timeout:*)",
+      "Bash(pip install:*)",
+      "Bash(source ~/miniconda3/bin/activate darts-env)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

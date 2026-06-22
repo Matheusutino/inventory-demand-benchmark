@@ -1,0 +1,17 @@
+#python: 3.11.14
+
+torch
+pyarrow
+
+numpy
+pandas
+scikit-learn
+matplotlib
+
+u8darts[torch]
+catboost
+xgboost
+lightgbm
+optuna
+darts
+prophet

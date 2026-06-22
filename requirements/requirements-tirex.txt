@@ -1,0 +1,12 @@
+#python: 3.11.14
+
+torch
+huggingface_hub
+pyarrow
+
+numpy
+pandas
+scikit-learn
+matplotlib
+
+tirex-ts

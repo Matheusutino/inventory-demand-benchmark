@@ -1,0 +1,10 @@
+#python: 3.10
+
+torch
+numpy
+pandas
+pyarrow
+transformers==4.40.1
+
+scikit-learn
+matplotlib

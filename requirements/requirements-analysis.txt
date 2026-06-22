@@ -1,0 +1,11 @@
+#python: 3.11.14
+
+torch
+pyarrow
+
+numpy
+pandas
+scikit-learn
+matplotlib
+scipy
+scikit-posthocs

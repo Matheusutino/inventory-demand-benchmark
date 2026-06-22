@@ -1,0 +1,13 @@
+#python: 3.11.14
+
+torch
+transformers
+huggingface_hub
+pyarrow
+
+numpy
+pandas
+scikit-learn
+matplotlib
+
+uni2ts
