@@ -1,56 +1,56 @@
-# Enterprise Demand Forecasting Benchmark
+# Beyond Point-Wise Accuracy: An Inventory-Aware Benchmark for Multi-SKU Enterprise Demand Forecasting
 
-Benchmark de modelos de forecasting para demanda empresarial mensal em múltiplos
-SKUs. O projeto compara modelos estatísticos, machine learning clássico e
-foundation models nos horizontes H3 e H6.
+A benchmark of monthly enterprise demand forecasting models across multiple
+SKUs. The project compares statistical methods, classical machine learning
+models, and time-series foundation models over H3 and H6 forecasting horizons.
 
-Além de métricas tradicionais, o benchmark utiliza a `InventoryDemandLoss`, uma
-avaliação composta voltada a aspectos operacionais da demanda, como erro por
-item, volume agregado, participação dos SKUs, alocação, esparsidade e variação
-temporal.
+In addition to traditional forecasting metrics, the benchmark uses the
+`InventoryDemandLoss`, a composite evaluation designed to capture operational
+aspects of demand forecasting, including item-level error, aggregate volume,
+SKU shares, allocation, sparsity, and temporal variation.
 
-## Estrutura
+## Project Structure
 
 ```text
 .
 ├── data/
-│   ├── datasets/       # Datasets train/test
-│   ├── predictions/    # Previsões dos modelos
-│   └── analysis/       # Métricas, tabelas e figuras
-├── requirements/       # Dependências separadas por modelo
+│   ├── datasets/       # Train/test datasets
+│   ├── predictions/    # Model predictions
+│   └── analysis/       # Metrics, tables, and figures
+├── requirements/       # Dependencies separated by model family
 ├── scripts/
-│   ├── setup_venvs.sh  # Criação dos ambientes
-│   └── run_models.py   # Runner dos modelos
+│   ├── setup_venvs.sh  # Virtual environment setup
+│   └── run_models.py   # Model runner
 └── src/
-    ├── analysis/       # Métricas e visualizações
+    ├── analysis/       # Metrics and visualizations
     ├── losses/         # InventoryDemandLoss
-    ├── models/         # Wrappers dos modelos
-    └── utils/          # Carregamento e salvamento
+    ├── models/         # Model wrappers
+    └── utils/          # Data loading and output helpers
 ```
 
-O diretório `data/` é ignorado pelo Git. Os dados e resultados precisam ser
-disponibilizados localmente.
+The `data/` directory is ignored by Git. Datasets and generated results must be
+made available locally.
 
-## Formato dos Datasets
+## Dataset Format
 
-Cada dataset é composto por dois arquivos:
+Each dataset consists of two files:
 
 ```text
 data/datasets/<dataset>_train.parquet
 data/datasets/<dataset>_test.parquet
 ```
 
-Os arquivos devem estar no formato wide:
+Files must use a wide format:
 
 ```text
 date | SKU_1 | SKU_2 | ... | SKU_N
 ```
 
-- `date`: timestamp mensal;
-- demais colunas: demanda de cada SKU;
-- número de linhas no teste: horizonte de previsão.
+- `date`: monthly timestamp;
+- remaining columns: demand for each SKU;
+- number of test rows: forecasting horizon.
 
-Exemplo:
+Example:
 
 ```text
 data/datasets/Filtros_h3_train.parquet
@@ -59,30 +59,30 @@ data/datasets/Filtros_h6_train.parquet
 data/datasets/Filtros_h6_test.parquet
 ```
 
-## Instalação
+## Installation
 
-O projeto usa um ambiente virtual separado por família de modelos para evitar
-conflitos de dependências.
+The project uses one virtual environment per model family to avoid dependency
+conflicts.
 
-Criar todos os ambientes:
+Create all environments:
 
 ```bash
 scripts/setup_venvs.sh
 ```
 
-Criar apenas ambientes específicos:
+Create selected environments:
 
 ```bash
 scripts/setup_venvs.sh chronos darts analysis
 ```
 
-Atualizar as dependências de ambientes existentes:
+Synchronize dependencies in existing environments:
 
 ```bash
 scripts/setup_venvs.sh --sync-existing chronos darts analysis
 ```
 
-Os ambientes são criados em:
+Environments are created under:
 
 ```text
 .venvs/analysis
@@ -96,12 +96,12 @@ Os ambientes são criados em:
 .venvs/tirex
 ```
 
-O runner não precisa ativar os ambientes. Ele chama diretamente o interpretador
-correto em `.venvs/<ambiente>/bin/python`.
+The model runner does not activate environments. It directly invokes the
+appropriate interpreter from `.venvs/<environment>/bin/python`.
 
-## Modelos
+## Models
 
-Foundation models:
+Time-series foundation models:
 
 - Amazon Chronos-2;
 - Salesforce Moirai 2.0 Small;
@@ -112,7 +112,7 @@ Foundation models:
 - THUML Sundial Base 128M;
 - THUML Timer Base 84M.
 
-Baselines e modelos clássicos via Darts:
+Statistical and classical machine learning baselines implemented with Darts:
 
 - ARIMA;
 - Prophet;
@@ -124,33 +124,33 @@ Baselines e modelos clássicos via Darts:
 - Global Naive Drift;
 - Global Naive Seasonal.
 
-Os modelos Darts usam validação interna por dataset. Por padrão, a seleção é
-feita por MAE.
+Darts models use an internal validation split for each dataset. MAE is used as
+the default validation metric.
 
-## Executar Modelos
+## Running Models
 
-Listar modelos e datasets disponíveis:
+List available models and datasets:
 
 ```bash
 scripts/run_models.py --list
 ```
 
-Executar todos os modelos padrão em todos os datasets:
+Run all default models on all datasets:
 
 ```bash
 scripts/run_models.py --device cuda
 ```
 
-Modelos que exigem treinamento ou licença externa não são incluídos
-automaticamente.
+Models requiring training or external license acceptance are not included by
+default.
 
-Executar um modelo:
+Run one model:
 
 ```bash
 scripts/run_models.py --models timesfm
 ```
 
-Executar modelos específicos:
+Run selected models:
 
 ```bash
 scripts/run_models.py \
@@ -158,7 +158,7 @@ scripts/run_models.py \
   --device cuda
 ```
 
-Executar em um dataset:
+Run a model on one dataset:
 
 ```bash
 scripts/run_models.py \
@@ -166,7 +166,7 @@ scripts/run_models.py \
   --datasets Mecanismos_h3
 ```
 
-Executar combinações específicas:
+Run selected model and dataset combinations:
 
 ```bash
 scripts/run_models.py \
@@ -175,26 +175,26 @@ scripts/run_models.py \
   --include-gated
 ```
 
-As previsões são salvas em:
+Predictions are saved to:
 
 ```text
-data/predictions/<modelo>_all_datasets_predictions.parquet
+data/predictions/<model>_all_datasets_predictions.parquet
 ```
 
 ### TabPFN-TS
 
-O TabPFN-TS local exige aceite de licença e uma API key da Prior Labs:
+Local TabPFN-TS inference requires license acceptance and a Prior Labs API key:
 
-1. acesse `https://ux.priorlabs.ai`;
-2. aceite a licença do TabPFN;
-3. copie a API key;
-4. exporte o token:
+1. open `https://ux.priorlabs.ai`;
+2. accept the TabPFN license;
+3. copy the API key;
+4. export the token:
 
 ```bash
-export TABPFN_TOKEN="<sua-api-key>"
+export TABPFN_TOKEN="<your-api-key>"
 ```
 
-Depois execute:
+Then run:
 
 ```bash
 scripts/run_models.py \
@@ -202,22 +202,22 @@ scripts/run_models.py \
   --include-gated
 ```
 
-## Executar Análises
+## Running the Analyses
 
-Criar o ambiente de análise:
+Create the analysis environment:
 
 ```bash
 scripts/setup_venvs.sh analysis
 ```
 
-Executar todo o pipeline:
+Run the complete analysis pipeline:
 
 ```bash
 src/analysis/run_all_analysis.sh \
   --python .venvs/analysis/bin/python
 ```
 
-Gerar também os gráficos de previsão para um dataset:
+Also generate prediction plots for a selected dataset:
 
 ```bash
 src/analysis/run_all_analysis.sh \
@@ -225,7 +225,7 @@ src/analysis/run_all_analysis.sh \
   --dataset Mecanismos_h3
 ```
 
-Pular análises específicas:
+Skip selected analyses:
 
 ```bash
 src/analysis/run_all_analysis.sh \
@@ -235,39 +235,39 @@ src/analysis/run_all_analysis.sh \
 
 ## Inventory Demand Loss
 
-A implementação está em:
+The implementation is available at:
 
 ```text
 src/losses/loss.py
 ```
 
-Os componentes utilizados na análise atual são:
+The current analysis uses the following components:
 
-- `item`: erro médio por SKU;
-- `sum`: erro no volume total;
-- `share`: diferença na participação relativa dos SKUs;
-- `alloc`: erro de alocação entre itens;
-- `weighted_item`: erro ponderado por escala;
-- `rel`: erro relativo;
-- `cap`: penalização de previsões excessivas;
-- `asym`: penalização assimétrica;
-- `sparse`: comportamento em demanda esparsa;
-- `delta`: erro na variação temporal;
-- `robust`: erro com influência limitada de extremos.
+- `item`: mean error across individual SKUs;
+- `sum`: aggregate-volume error;
+- `share`: difference between actual and predicted SKU shares;
+- `alloc`: allocation error across items;
+- `weighted_item`: scale-weighted item error;
+- `rel`: relative error;
+- `cap`: excessive-forecast penalty;
+- `asym`: asymmetric error penalty;
+- `sparse`: behavior under sparse demand;
+- `delta`: temporal-change error;
+- `robust`: error with limited influence from extreme residuals.
 
-Os componentes `neg`, `tv` e `int` não são usados na comparação principal.
-Para o CD diagram e os heatmaps, cada componente é normalizado entre 0 e 1
-dentro de cada dataset antes da agregação.
+The `neg`, `tv`, and `int` components are not included in the primary
+comparison. For the critical-difference diagrams and heatmaps, every component
+is normalized between 0 and 1 within each dataset before aggregation.
 
-## Principais Saídas
+## Main Outputs
 
-Métricas tradicionais:
+Traditional forecasting metrics:
 
 ```text
 data/analysis/metrics/
 ```
 
-Caracterização dos datasets:
+Dataset characterization:
 
 ```text
 data/analysis/dataset/dataset_summary.csv
@@ -275,7 +275,7 @@ data/analysis/dataset/dataset_sku_summary.csv
 data/analysis/dataset/dataset_panel_summary.csv
 ```
 
-Vitórias por componente da loss:
+Wins by Inventory Demand Loss component:
 
 ```text
 data/analysis/loss_wins/loss_component_values.csv
@@ -283,14 +283,14 @@ data/analysis/loss_wins/loss_component_winners.csv
 data/analysis/loss_wins/loss_component_win_counts_summary.csv
 ```
 
-CD diagrams:
+Critical-difference diagrams:
 
 ```text
 data/analysis/cd_diagram/inventory_loss_cd.png
 data/analysis/cd_diagram/mae_cd.png
 ```
 
-Figuras principais:
+Main figures:
 
 ```text
 data/analysis/plots/item_sum_mae_overall.pdf
@@ -299,24 +299,24 @@ data/analysis/plots/inventory_loss_panel_heatmap.pdf
 data/analysis/plots/dataset_panel_inventory_rank_heatmap.pdf
 ```
 
-Tabelas correspondentes são salvas em CSV no mesmo diretório.
+Corresponding tables are saved as CSV files in the same output directories.
 
-## Execução em Background
+## Background Execution
 
-Para rodar todos os modelos em background:
+Run all models in the background:
 
 ```bash
 nohup scripts/run_models.py --device cuda \
   > run_models.log 2>&1 &
 ```
 
-Acompanhar:
+Monitor progress:
 
 ```bash
 tail -f run_models.log
 ```
 
-Para rodar apenas alguns modelos:
+Run selected models in the background:
 
 ```bash
 nohup scripts/run_models.py \
@@ -325,14 +325,15 @@ nohup scripts/run_models.py \
   > run_selected_models.log 2>&1 &
 ```
 
-## Reprodutibilidade
+## Reproducibility
 
-- Execute os comandos a partir da raiz do projeto.
-- Use os arquivos em `requirements/` para reproduzir os ambientes.
-- Preserve os nomes dos datasets entre os arquivos train/test.
-- Para comparações finais, regenere as previsões antes de executar
-  `run_all_analysis.sh`.
-- Checkpoints e APIs externas podem exigir autenticação ou aceite de licença.
+- Run all commands from the project root.
+- Use the files under `requirements/` to reproduce the environments.
+- Keep dataset names consistent between train and test files.
+- Regenerate predictions before running `run_all_analysis.sh` for final
+  comparisons.
+- External checkpoints and APIs may require authentication or license
+  acceptance.
 
-Mais detalhes sobre os scripts de análise estão em
+Additional analysis documentation is available in
 [`src/analysis/README.md`](src/analysis/README.md).
