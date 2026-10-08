@@ -6,12 +6,14 @@ import numpy as np
 import pandas as pd
 from matplotlib.patches import Patch
 
-from src.analysis.plot_item_sum_mae import (
-    GROUP_COLORS,
-    GROUP_LABELS,
-    GROUP_ORDER,
-    compute_item_sum_mae,
+from src.analysis.model_style import (
+    FAMILY_COLORS,
+    FAMILY_LABELS,
+    FAMILY_ORDER,
     model_color,
+)
+from src.analysis.plot_item_sum_mae import (
+    compute_item_sum_mae,
     split_csv_or_space,
 )
 
@@ -72,7 +74,7 @@ def plot_degradation(overall: pd.DataFrame, output_path: Path) -> None:
     ]
     fig, axes = plt.subplots(1, 2, figsize=(18, max(6, 0.38 * len(overall))), sharey=False)
 
-    for ax, (metric, title) in zip(axes, metrics):
+    for ax, (metric, metric_label) in zip(axes, metrics):
         plot_df = overall.sort_values(metric, ascending=True).copy()
         y = np.arange(len(plot_df))
         colors = [model_color(model) for model in plot_df["model"]]
@@ -82,8 +84,7 @@ def plot_degradation(overall: pd.DataFrame, output_path: Path) -> None:
         ax.set_yticks(y)
         ax.set_yticklabels(plot_df["pretty_model"])
         ax.invert_yaxis()
-        ax.set_xlabel("H6 vs H3 MAE increase (%)")
-        ax.set_title(title)
+        ax.set_xlabel(f"{metric_label}: H6 vs H3 increase (%)")
         ax.grid(axis="x", alpha=0.25)
 
         values = plot_df[metric].astype(float).to_numpy()
@@ -102,11 +103,11 @@ def plot_degradation(overall: pd.DataFrame, output_path: Path) -> None:
         ax.set_xlim(lower, upper)
 
     legend_handles = [
-        Patch(facecolor=GROUP_COLORS[group], label=GROUP_LABELS[group])
-        for group in GROUP_ORDER
+        Patch(facecolor=FAMILY_COLORS[group], label=FAMILY_LABELS[group])
+        for group in FAMILY_ORDER
     ]
-    fig.legend(handles=legend_handles, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.02))
-    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    fig.legend(handles=legend_handles, loc="lower center", ncol=len(FAMILY_ORDER), fontsize=9, frameon=False, bbox_to_anchor=(0.5, -0.02))
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
     fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
 
@@ -129,7 +130,7 @@ def main():
     parser = argparse.ArgumentParser(description="Plota degradação de MAE de H3 para H6.")
     parser.add_argument("--data-dir", type=str, default="data/datasets")
     parser.add_argument("--predictions-dir", type=str, default="data/predictions")
-    parser.add_argument("--output-dir", type=str, default="data/analysis/plots")
+    parser.add_argument("--output-dir", type=str, default="data/analysis/diagnostics/horizon_degradation")
     parser.add_argument("--models", nargs="+", default=None)
     args = parser.parse_args()
 

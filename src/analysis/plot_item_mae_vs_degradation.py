@@ -7,12 +7,14 @@ import pandas as pd
 from matplotlib.patches import Patch
 
 from src.analysis.plot_horizon_degradation import compute_degradation
-from src.analysis.plot_item_sum_mae import (
-    GROUP_COLORS,
-    GROUP_LABELS,
-    GROUP_ORDER,
-    compute_item_sum_mae,
+from src.analysis.model_style import (
+    FAMILY_COLORS,
+    FAMILY_LABELS,
+    FAMILY_ORDER,
     model_color,
+)
+from src.analysis.plot_item_sum_mae import (
+    compute_item_sum_mae,
     split_csv_or_space,
 )
 
@@ -81,17 +83,16 @@ def plot_item_mae_vs_degradation(table: pd.DataFrame, output_path: Path, label_t
             ax.set_xlim(right=float(np.nanmax(values)) * 1.18)
 
     legend_handles = [
-        Patch(facecolor=GROUP_COLORS[group], label=GROUP_LABELS[group])
-        for group in GROUP_ORDER
+        Patch(facecolor=FAMILY_COLORS[group], label=FAMILY_LABELS[group])
+        for group in FAMILY_ORDER
     ]
-    fig.legend(handles=legend_handles, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.02))
-    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    fig.legend(handles=legend_handles, loc="lower center", ncol=3, fontsize=8, frameon=False, bbox_to_anchor=(0.5, -0.02))
+    fig.tight_layout(rect=(0, 0.09, 1, 1))
     fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
-    fig.savefig(output_path.with_suffix(".png"), dpi=220, bbox_inches="tight")
     plt.close(fig)
 
 
-def save_outputs(table: pd.DataFrame, output_dir: str, label_top_n: int) -> tuple[Path, Path, Path]:
+def save_outputs(table: pd.DataFrame, output_dir: str, label_top_n: int) -> tuple[Path, Path]:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -99,14 +100,14 @@ def save_outputs(table: pd.DataFrame, output_dir: str, label_top_n: int) -> tupl
     plot_base = output_path / "item_mae_vs_horizon_degradation"
     table.to_csv(csv_path, index=False)
     plot_item_mae_vs_degradation(table, plot_base, label_top_n=label_top_n)
-    return csv_path, plot_base.with_suffix(".pdf"), plot_base.with_suffix(".png")
+    return csv_path, plot_base.with_suffix(".pdf")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Combina Item-level MAE médio e degradação H6 vs H3 em uma figura.")
     parser.add_argument("--data-dir", type=str, default="data/datasets")
     parser.add_argument("--predictions-dir", type=str, default="data/predictions")
-    parser.add_argument("--output-dir", type=str, default="data/analysis/plots")
+    parser.add_argument("--output-dir", type=str, default="data/analysis/diagnostics/mae_vs_horizon")
     parser.add_argument("--models", nargs="+", default=None)
     parser.add_argument("--label-top-n", type=int, default=5)
     args = parser.parse_args()

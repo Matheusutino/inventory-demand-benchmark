@@ -102,6 +102,22 @@ MODEL_SPECS = [
         description="THUML Timer base 84M.",
     ),
     ModelSpec(
+        name="statsforecast_intermittent",
+        venv="darts",
+        module="src.models.intermittent_baselines",
+        base_args=("--model", "all"),
+        aliases=("intermittent",),
+        description="StatsForecast Croston, SBA e TSB por SKU.",
+        extra_by_name={
+            "statsforecast_croston": ("--model", "croston"),
+            "statsforecast_sba": ("--model", "sba"),
+            "statsforecast_tsb": ("--model", "tsb"),
+            "croston": ("--model", "croston"),
+            "sba": ("--model", "sba"),
+            "tsb": ("--model", "tsb"),
+        },
+    ),
+    ModelSpec(
         name="darts_classic",
         venv="darts",
         module="src.models.darts_classic",

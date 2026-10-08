@@ -13,6 +13,11 @@ import matplotlib
 
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+
+from src.analysis.model_style import (
+    FAMILY_COLORS, FAMILY_LABELS, FAMILY_ORDER, model_color, model_family, pretty_model_name,
+)
 
 matplotlib.rcParams['font.family'] = 'sans-serif'
 matplotlib.rcParams['font.sans-serif'] = 'Arial'
@@ -21,12 +26,13 @@ import operator
 from scipy.stats import wilcoxon
 from scipy.stats import friedmanchisquare
 
-from src.analysis.analyze_loss_wins import (
-    DEFAULT_LOSS_CONFIG,
+from src.evaluation.forecast_evaluation import (
+    DEFAULT_EVALUATION_CONFIG,
     IGNORED_COMPONENTS,
     active_components,
     evaluate_models,
     list_prediction_files,
+    load_history_by_dataset,
     load_truth_by_dataset,
     model_name_from_path,
 )
@@ -84,7 +90,7 @@ def nemenyi_posthoc(alpha=0.05, df_perf=None, verbose=False):
     return p_values, average_ranks, max_nb_datasets
 
 
-def draw_cd_diagram(output_path, df_perf=None, alpha=0.05, title=None, labels=False, posthoc='nemenyi', verbose=False):
+def draw_cd_diagram(output_path, df_perf=None, alpha=0.05, labels=False, posthoc='nemenyi', verbose=False):
     """
     Mantém as suas chamadas originais de cálculo, mas usa o scikit-posthocs 
     para gerar o desenho final sem sobreposição de barras e textos.
@@ -125,13 +131,6 @@ def draw_cd_diagram(output_path, df_perf=None, alpha=0.05, title=None, labels=Fa
         p_val_matrix.loc[clf1, clf2] = p_val
         p_val_matrix.loc[clf2, clf1] = p_val
 
-    # 3. Configura a figura
-    plt.figure(figsize=(9, max(4, len(classifiers) * 0.4))) # Altura dinâmica baseada na qtd de classificadores
-
-    if title:
-        font = {'family': 'sans-serif', 'color': 'black', 'weight': 'normal', 'size': 22}
-        plt.title(title, fontdict=font, pad=20)
-
     # 4. Define se vai mostrar os números (labels=True) ou não, controlando o espaçamento
     if labels:
         # Mostra o Nome do algoritmo e o (Rank)
@@ -142,16 +141,17 @@ def draw_cd_diagram(output_path, df_perf=None, alpha=0.05, title=None, labels=Fa
         fmt_left = '{label}'
         fmt_right = '{label}'
 
-    fig, ax = plt.subplots(figsize=(10, 2))
+    fig, ax = plt.subplots(figsize=(10, 3))
 
     # 5. Gera o gráfico limpo
-    sp.critical_difference_diagram(
+    artists = sp.critical_difference_diagram(
         ranks=average_ranks,
         sig_matrix=p_val_matrix,
         alpha=alpha,
         ax=ax,
         label_fmt_left=fmt_left,
         label_fmt_right=fmt_right,
+        color_palette={model: model_color(model) for model in classifiers},
         
         # --- CUSTOMIZAÇÕES AQUI ---
         
@@ -163,21 +163,34 @@ def draw_cd_diagram(output_path, df_perf=None, alpha=0.05, title=None, labels=Fa
         
         # 2. elbow_props: Linhas que saem do eixo principal e vão até os nomes
         elbow_props={
-            'color': 'black',     # Cor da linha 
             'linewidth': 1.5,    # Grossura da linha
             #'linestyle': '--'    # Estilo da linha (Tracejado, opcional)
         },
         
         # 3. marker_props (Bônus): As bolinhas no eixo principal
         marker_props={
-            'color': 'black',    # Cor da bolinha
             's': 30              # Tamanho da bolinha (size)
         }
     )
 
+    # Preserve model IDs for statistics; use the shared display names in the figure.
+    display_labels = {
+        fmt.format(label=model, rank=rank): fmt.format(label=pretty_model_name(model), rank=rank)
+        for model, rank in average_ranks.items()
+        for fmt in (fmt_left, fmt_right)
+    }
+    for label in artists['labels']:
+        label.set_text(display_labels[label.get_text()])
+    present = [family for family in FAMILY_ORDER if family in {model_family(model) for model in classifiers}]
+    fig.legend(
+        handles=[Patch(facecolor=FAMILY_COLORS[family], label=FAMILY_LABELS[family]) for family in present],
+        loc='lower center', ncol=3, fontsize=8, frameon=False,
+    )
+    fig.subplots_adjust(bottom=0.23)
+
     # 6. Salva o arquivo final
-    plt.savefig(output_path, bbox_inches='tight')
-    plt.close()
+    fig.savefig(output_path, bbox_inches='tight')
+    plt.close(fig)
 
 
 def compute_average_ranks(df_perf: pd.DataFrame) -> pd.Series:
@@ -278,11 +291,11 @@ def wilcoxon_holm(alpha=0.05, df_perf=None, verbose=False):
 
 
 def minmax_normalize_components(
-    loss_results: pd.DataFrame,
+    component_values: pd.DataFrame,
     components: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     rows = []
-    for dataset_name, dataset_group in loss_results.groupby("dataset", sort=True):
+    for dataset_name, dataset_group in component_values.groupby("dataset", sort=True):
         for component in components:
             values = dataset_group[component].astype(float)
             min_value = values.min()
@@ -298,16 +311,16 @@ def minmax_normalize_components(
                         "model": row["model"],
                         "component": component,
                         "raw_value": raw_value,
-                        "normalized_loss": float(normalized),
+                        "normalized_score": float(normalized),
                     }
                 )
 
     component_df = pd.DataFrame(rows)
     score_df = (
         component_df.groupby(["dataset", "model"], as_index=False)
-        .agg(normalized_loss=("normalized_loss", "mean"))
+        .agg(normalized_score=("normalized_score", "mean"))
     )
-    score_df["performance"] = 1.0 - score_df["normalized_loss"]
+    score_df["performance"] = 1.0 - score_df["normalized_score"]
     return component_df, score_df
 
 
@@ -317,25 +330,26 @@ def build_cd_performance(
     models: list[str] | None,
     ignored_components: set[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    loss_config = DEFAULT_LOSS_CONFIG.copy()
+    evaluation_config = DEFAULT_EVALUATION_CONFIG.copy()
     truth_by_dataset = load_truth_by_dataset(data_dir)
     prediction_files = list_prediction_files(predictions_dir, models)
-    loss_results = evaluate_models(truth_by_dataset, prediction_files, loss_config)
+    component_values = evaluate_models(truth_by_dataset, prediction_files, evaluation_config,
+                                   load_history_by_dataset(data_dir))
 
     components = [
         component
-        for component in active_components(loss_results)
+        for component in active_components(component_values)
         if component not in ignored_components
     ]
     if not components:
         raise ValueError("Nenhum componente ativo para montar o CD diagram.")
 
-    component_df, score_df = minmax_normalize_components(loss_results, components)
-    finite_by_model = score_df.groupby("model")["normalized_loss"].apply(lambda s: np.isfinite(s).all())
+    component_df, score_df = minmax_normalize_components(component_values, components)
+    finite_by_model = score_df.groupby("model")["normalized_score"].apply(lambda s: np.isfinite(s).all())
     dropped_models = sorted(finite_by_model[~finite_by_model].index.tolist())
     if dropped_models:
         print(
-            "Aviso: removendo modelos com InventoryDemandLoss não finita no CD diagram: "
+            "Aviso: removendo modelos com agregado legado não finito no CD diagram: "
             + ", ".join(dropped_models)
         )
         valid_models = set(finite_by_model[finite_by_model].index)
@@ -348,12 +362,12 @@ def build_cd_performance(
             "model": "classifier_name",
             "performance": "accuracy",
         }
-    )[["classifier_name", "dataset_name", "accuracy", "normalized_loss"]]
+    )[["classifier_name", "dataset_name", "accuracy", "normalized_score"]]
 
     ranks = (
         df_perf.assign(rank=df_perf.groupby("dataset_name")["accuracy"].rank(ascending=False, method="average"))
         .groupby("classifier_name", as_index=False)
-        .agg(avg_rank=("rank", "mean"), mean_normalized_loss=("normalized_loss", "mean"))
+        .agg(avg_rank=("rank", "mean"), mean_normalized_score=("normalized_score", "mean"))
         .sort_values("avg_rank")
     )
     return df_perf, component_df, score_df, ranks
@@ -437,17 +451,15 @@ def build_mae_cd_performance(
             "dataset": "dataset_name",
             "model": "classifier_name",
             "performance": "accuracy",
-            "mae": "normalized_loss",
         }
-    )[["classifier_name", "dataset_name", "accuracy", "normalized_loss"]]
+    )[["classifier_name", "dataset_name", "accuracy", "mae"]]
 
     ranks = (
         df_perf.assign(rank=df_perf.groupby("dataset_name")["accuracy"].rank(ascending=False, method="average"))
         .groupby("classifier_name", as_index=False)
-        .agg(avg_rank=("rank", "mean"), mean_mae=("normalized_loss", "mean"))
+        .agg(avg_rank=("rank", "mean"), mean_mae=("mae", "mean"))
         .sort_values("avg_rank")
     )
-    score_df = score_df.rename(columns={"mae": "normalized_loss"})
     return df_perf, series_df, score_df, ranks
 
 
@@ -487,13 +499,13 @@ def split_csv_or_space(values: list[str] | None) -> list[str] | None:
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Gera CD diagram para regressão usando InventoryDemandLoss com "
+            "Gera CD diagram de MAE ou análise legada com "
             "componentes normalizados por dataset entre 0 e 1."
         )
     )
     parser.add_argument("--data-dir", type=str, default="data/datasets")
     parser.add_argument("--predictions-dir", type=str, default="data/predictions")
-    parser.add_argument("--output-dir", type=str, default="data/analysis/cd_diagram")
+    parser.add_argument("--output-dir", type=str, default="data/analysis/accuracy/cd_diagram")
     parser.add_argument("--models", nargs="+", default=None)
     parser.add_argument("--alpha", type=float, default=0.05)
     parser.add_argument("--posthoc", choices=["nemenyi", "wilcoxon"], default="nemenyi")
@@ -501,16 +513,16 @@ def main():
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument(
         "--score",
-        choices=["inventory_loss", "mae"],
-        default="inventory_loss",
-        help="Score usado no CD diagram. inventory_loss normaliza componentes; mae usa MAE médio por SKU.",
+        choices=["inventory_score", "mae"],
+        default="mae",
+        help="mae usa MAE médio por SKU; inventory_score é um agregado legado fora do framework atual.",
     )
-    parser.add_argument("--prefix", type=str, default="inventory_loss_cd")
+    parser.add_argument("--prefix", type=str, default=None)
     parser.add_argument(
         "--ignore-components",
         nargs="+",
         default=sorted(IGNORED_COMPONENTS),
-        help="Componentes ignorados no score normalizado. Default: int neg total tv.",
+        help="Componentes ignorados no agregado legado. Default: int neg sparse total tv.",
     )
     args = parser.parse_args()
 
@@ -518,9 +530,7 @@ def main():
     ignored_components = set(split_csv_or_space(args.ignore_components) or [])
     ignored_components.add("total")
 
-    prefix = args.prefix
-    if args.score == "mae" and prefix == "inventory_loss_cd":
-        prefix = "mae_cd"
+    prefix = args.prefix or ("mae_cd" if args.score == "mae" else "inventory_score_cd")
 
     if args.score == "mae":
         df_perf, component_df, score_df, ranks = build_mae_cd_performance(
@@ -528,7 +538,6 @@ def main():
             predictions_dir=args.predictions_dir,
             models=models,
         )
-        title = "MAE CD Diagram"
     else:
         df_perf, component_df, score_df, ranks = build_cd_performance(
             data_dir=args.data_dir,
@@ -536,7 +545,6 @@ def main():
             models=models,
             ignored_components=ignored_components,
         )
-        title = "InventoryDemandLoss CD Diagram"
 
     detail_suffix = "series_mae" if args.score == "mae" else "components_normalized"
     table_paths = save_cd_tables(
@@ -549,12 +557,11 @@ def main():
         detail_suffix=detail_suffix,
     )
 
-    output_path = Path(args.output_dir) / f"{prefix}.png"
+    output_path = Path(args.output_dir) / f"{prefix}.pdf"
     draw_cd_diagram(
         output_path=str(output_path),
         df_perf=df_perf,
         alpha=args.alpha,
-        title=title,
         labels=args.labels,
         posthoc=args.posthoc,
         verbose=args.verbose,
@@ -579,4 +586,4 @@ if __name__ == "__main__":
 
 # df_perf = pd.read_csv('example.csv', index_col=False)
 
-# draw_cd_diagram(df_perf=df_perf, title='Accuracy', labels=True)
+# draw_cd_diagram(df_perf=df_perf, labels=True)

@@ -1,3 +1,5 @@
+"""Plot historical normalized aggregate ranks, outside the current framework."""
+
 import argparse
 from pathlib import Path
 
@@ -6,15 +8,15 @@ import numpy as np
 import pandas as pd
 from matplotlib.patches import Patch
 
-from src.analysis.plot_item_sum_mae import (
-    GROUP_COLORS,
-    GROUP_LABELS,
-    GROUP_ORDER,
-    PANEL_ORDER,
+from src.analysis.model_style import (
+    FAMILY_COLORS,
+    FAMILY_LABELS,
+    FAMILY_ORDER,
     model_color,
-    model_group,
+    model_family,
     pretty_model_name,
 )
+from src.analysis.plot_item_sum_mae import PANEL_ORDER
 
 
 PANEL_LABELS = {
@@ -37,28 +39,28 @@ def load_inventory_performance(input_path: str) -> pd.DataFrame:
         raise FileNotFoundError(f"Arquivo não encontrado: {path}")
 
     df = pd.read_csv(path)
-    required = {"classifier_name", "dataset_name", "normalized_loss"}
+    required = {"classifier_name", "dataset_name", "normalized_score"}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"{path} sem colunas obrigatórias: {sorted(missing)}")
 
     df = df.rename(columns={"classifier_name": "model", "dataset_name": "dataset"})
-    df = df[np.isfinite(df["normalized_loss"])].copy()
+    df = df[np.isfinite(df["normalized_score"])].copy()
     df["panel"] = df["dataset"].map(panel_name)
     df["pretty_model"] = df["model"].map(pretty_model_name)
-    df["group"] = df["model"].map(model_group)
+    df["group"] = df["model"].map(model_family)
     df["color"] = df["model"].map(model_color)
     return df
 
 
 def compute_panel_tables(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    panel_loss = (
+    panel_score = (
         df.groupby(["model", "pretty_model", "group", "color", "panel"], as_index=False)
-        .agg(normalized_loss=("normalized_loss", "mean"), datasets=("dataset", "nunique"))
+        .agg(normalized_score=("normalized_score", "mean"), datasets=("dataset", "nunique"))
     )
-    panel_loss["rank"] = panel_loss.groupby("panel")["normalized_loss"].rank(method="average", ascending=True)
+    panel_score["rank"] = panel_score.groupby("panel")["normalized_score"].rank(method="average", ascending=True)
 
-    rank_table = panel_loss.pivot_table(
+    rank_table = panel_score.pivot_table(
         index=["model", "pretty_model", "group", "color"],
         columns="panel",
         values="rank",
@@ -69,16 +71,16 @@ def compute_panel_tables(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     rank_table["avg_rank"] = rank_table[available_panels].mean(axis=1)
     rank_table = rank_table.sort_values(["avg_rank", "pretty_model"], ascending=[True, True])
 
-    loss_table = panel_loss.pivot_table(
+    score_table = panel_score.pivot_table(
         index=["model", "pretty_model", "group", "color"],
         columns="panel",
-        values="normalized_loss",
+        values="normalized_score",
         aggfunc="mean",
     ).reset_index()
-    loss_table["avg_normalized_loss"] = loss_table[available_panels].mean(axis=1)
-    loss_table = loss_table.sort_values(["avg_normalized_loss", "pretty_model"], ascending=[True, True])
+    score_table["avg_normalized_score"] = score_table[available_panels].mean(axis=1)
+    score_table = score_table.sort_values(["avg_normalized_score", "pretty_model"], ascending=[True, True])
 
-    return rank_table, loss_table
+    return rank_table, score_table
 
 
 def plot_rank_heatmap(rank_table: pd.DataFrame, output_path: Path, top_n: int | None) -> None:
@@ -113,54 +115,53 @@ def plot_rank_heatmap(rank_table: pd.DataFrame, output_path: Path, top_n: int | 
     cbar.set_label("Average rank, lower is better")
 
     legend_handles = [
-        Patch(facecolor=GROUP_COLORS[group], label=GROUP_LABELS[group])
-        for group in GROUP_ORDER
+        Patch(facecolor=FAMILY_COLORS[group], label=FAMILY_LABELS[group])
+        for group in FAMILY_ORDER
     ]
-    fig.legend(handles=legend_handles, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.01))
-    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    fig.legend(handles=legend_handles, loc="lower center", ncol=3, fontsize=8, frameon=False, bbox_to_anchor=(0.5, -0.01))
+    fig.tight_layout(rect=(0, 0.09, 1, 1))
     fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
-    fig.savefig(output_path.with_suffix(".png"), dpi=220, bbox_inches="tight")
     plt.close(fig)
 
 
 def save_outputs(
     rank_table: pd.DataFrame,
-    loss_table: pd.DataFrame,
+    score_table: pd.DataFrame,
     output_dir: str,
     top_n: int | None,
-) -> tuple[Path, Path, Path, Path]:
+) -> tuple[Path, Path, Path]:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     rank_path = output_path / "dataset_panel_inventory_rank_heatmap.csv"
-    loss_path = output_path / "dataset_panel_inventory_loss.csv"
+    score_path = output_path / "dataset_panel_inventory_score.csv"
     plot_base = output_path / "dataset_panel_inventory_rank_heatmap"
 
     rank_table.to_csv(rank_path, index=False)
-    loss_table.to_csv(loss_path, index=False)
+    score_table.to_csv(score_path, index=False)
     plot_rank_heatmap(rank_table, plot_base, top_n)
 
-    return rank_path, loss_path, plot_base.with_suffix(".pdf"), plot_base.with_suffix(".png")
+    return rank_path, score_path, plot_base.with_suffix(".pdf")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Gera heatmap de rank por painel usando InventoryDemandLoss normalizada.")
+    parser = argparse.ArgumentParser(description="Análise legada: rank por painel do agregado de componentes normalizados.")
     parser.add_argument(
         "--input",
         type=str,
-        default="data/analysis/cd_diagram/inventory_loss_cd_performance.csv",
-        help="CSV gerado pelo cd_diagram com normalized_loss.",
+        default="data/analysis/accuracy/cd_diagram/inventory_score_cd_performance.csv",
+        help="CSV gerado pelo cd_diagram com normalized_score.",
     )
-    parser.add_argument("--output-dir", type=str, default="data/analysis/plots")
+    parser.add_argument("--output-dir", type=str, default="data/analysis/legacy/panel_rank")
     parser.add_argument("--top-n", type=int, default=10, help="Número de modelos no heatmap. Use 0 para todos.")
     args = parser.parse_args()
 
     top_n = None if args.top_n == 0 else args.top_n
     df = load_inventory_performance(args.input)
-    rank_table, loss_table = compute_panel_tables(df)
-    paths = save_outputs(rank_table, loss_table, args.output_dir, top_n)
+    rank_table, score_table = compute_panel_tables(df)
+    paths = save_outputs(rank_table, score_table, args.output_dir, top_n)
 
-    print("Top modelos por rank médio em InventoryDemandLoss normalizada:")
+    print("Top modelos por rank médio no agregado legado de componentes:")
     print(rank_table[["pretty_model", "avg_rank"]].head(top_n or len(rank_table)).to_string(index=False))
     print("\nArquivos salvos:")
     for path in paths:

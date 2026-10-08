@@ -8,6 +8,16 @@ from matplotlib.patches import Patch
 
 from src.utils.data_loader import DataLoader, discover_datasets
 
+from src.analysis.model_style import (
+    FAMILY_COLORS,
+    FAMILY_LABELS,
+    FAMILY_ORDER,
+    model_color,
+    model_marker,
+    model_family,
+    pretty_model_name,
+)
+
 
 DATASET_LABELS = {
     "Compressores Herméticos": "Hermetic Compressors",
@@ -24,100 +34,6 @@ PANEL_ORDER = [
     "Fan Motors",
     "Control Boards",
 ]
-
-PRETTY_MODEL_NAMES = {
-    "TiRex": "TiRex",
-    "chronos-2": "Chronos-2",
-    "darts_arima": "ARIMA",
-    "darts_global_naive_aggregate": "Global Naive Aggregate",
-    "darts_global_naive_drift": "Global Naive Drift",
-    "darts_global_naive_seasonal": "Global Naive Seasonal",
-    "darts_linear": "Linear Regression",
-    "darts_naive_moving_average": "Moving Average",
-    "darts_prophet": "Prophet",
-    "darts_randomforest": "Random Forest",
-    "darts_xgboost": "XGBoost",
-    "granite-timeseries-ttm-r2": "Granite TTM",
-    "moirai2-small": "Moirai2-Small",
-    "sundial-base-128m": "Sundial Base 128M",
-    "tabpfn-ts-local": "TabPFN-TS",
-    "timer-base-84m": "Timer Base 84M",
-    "timesfm-2.5-200m-pytorch": "TimesFM 2.5",
-}
-
-MODEL_GROUPS = {
-    "darts_naive_moving_average": "industry",
-    "darts_arima": "industry",
-    "darts_prophet": "industry",
-    "darts_linear": "classic_ml",
-    "darts_randomforest": "classic_ml",
-    "darts_lightgbm": "classic_ml",
-    "darts_xgboost": "classic_ml",
-    "darts_global_naive_aggregate": "classic_ml",
-    "darts_global_naive_drift": "classic_ml",
-    "darts_global_naive_seasonal": "classic_ml",
-    "chronos-2": "foundation",
-    "chronos-2-finetuned-lora": "foundation",
-    "granite-timeseries-ttm-r2": "foundation",
-    "moirai2-small": "foundation",
-    "sundial-base-128m": "foundation",
-    "tabpfn-ts-local": "foundation",
-    "timer-base-84m": "foundation",
-    "timesfm-2.5-200m-pytorch": "foundation",
-    "TiRex": "foundation",
-}
-
-GROUP_COLORS = {
-    "industry": "#4C78A8",
-    "classic_ml": "#F58518",
-    "foundation": "#54A24B",
-}
-
-GROUP_LABELS = {
-    "industry": "Industry",
-    "classic_ml": "Classic ML",
-    "foundation": "Foundation Models",
-}
-
-GROUP_ORDER = ["classic_ml", "industry", "foundation"]
-
-
-def pretty_model_name(model_name: str) -> str:
-    if model_name in PRETTY_MODEL_NAMES:
-        return PRETTY_MODEL_NAMES[model_name]
-
-    normalized = model_name.lower()
-    if "timesfm" in normalized:
-        return "TimesFM"
-    if "tabpfn" in normalized:
-        return "TabPFN-TS"
-    if "timer" in normalized:
-        return "Timer"
-    if "tirex" in normalized:
-        return "TiRex"
-    if "granite" in normalized:
-        return "Granite TTM"
-    if "moirai" in normalized:
-        return "Moirai"
-    if "sundial" in normalized:
-        return "Sundial"
-    return model_name.replace("darts_", "").replace("_", " ").title()
-
-
-def model_group(model_name: str) -> str:
-    if model_name in MODEL_GROUPS:
-        return MODEL_GROUPS[model_name]
-
-    normalized = model_name.lower()
-    if any(token in normalized for token in ["moving_average", "arima", "prophet"]):
-        return "industry"
-    if any(token in normalized for token in ["chronos", "moirai", "sundial", "timesfm", "tabpfn", "tirex", "granite", "timer"]):
-        return "foundation"
-    return "classic_ml"
-
-
-def model_color(model_name: str) -> str:
-    return GROUP_COLORS[model_group(model_name)]
 
 
 def panel_name(dataset_name: str) -> str:
@@ -220,7 +136,7 @@ def compute_item_sum_mae(data_dir: str, predictions_dir: str, models: list[str] 
                     "horizon": horizon_label(dataset_name),
                     "model": model_name,
                     "pretty_model": pretty_model_name(model_name),
-                    "group": model_group(model_name),
+                    "group": model_family(model_name),
                     "color": model_color(model_name),
                     "item_mae": item_mae,
                     "sum_mae": sum_mae,
@@ -271,7 +187,7 @@ def plot_by_panel(by_panel: pd.DataFrame, output_path: Path, log_scale: bool) ->
     fig, axes = plt.subplots(1, 2, figsize=(18, 6), sharex=True)
     metrics = [("item_mae", "Item-level MAE"), ("sum_mae", "Aggregate-sum MAE")]
 
-    for ax, (metric, title) in zip(axes, metrics):
+    for ax, (metric, metric_label) in zip(axes, metrics):
         for _, model_row in models.iterrows():
             model = model_row["model"]
             pretty = model_row["pretty_model"]
@@ -280,14 +196,14 @@ def plot_by_panel(by_panel: pd.DataFrame, output_path: Path, log_scale: bool) ->
             ax.plot(
                 panels,
                 values,
-                marker="o",
+                marker=model_marker(model),
                 linewidth=1.8,
                 markersize=4.5,
                 label=pretty,
                 color=model_color(model),
             )
 
-        ax.set_ylabel("MAE")
+        ax.set_ylabel(f"{metric_label} (demand units)")
         ax.grid(axis="y", alpha=0.25)
         ax.tick_params(axis="x", rotation=25)
         if log_scale:
@@ -311,7 +227,7 @@ def plot_overall(overall: pd.DataFrame, output_path: Path, log_scale: bool) -> N
     metrics = [("item_mae", "Item-level MAE"), ("sum_mae", "Aggregate-sum MAE")]
     fig, axes = plt.subplots(1, 2, figsize=(18, max(6, 0.38 * len(overall))), sharey=False)
 
-    for ax, (metric, title) in zip(axes, metrics):
+    for ax, (metric, metric_label) in zip(axes, metrics):
         plot_df = overall.sort_values(metric, ascending=True).copy()
         colors = [model_color(model) for model in plot_df["model"]]
         y = np.arange(len(plot_df))
@@ -320,8 +236,7 @@ def plot_overall(overall: pd.DataFrame, output_path: Path, log_scale: bool) -> N
         ax.set_yticks(y)
         ax.set_yticklabels(plot_df["pretty_model"])
         ax.invert_yaxis()
-        ax.set_xlabel("Mean MAE across all datasets")
-        ax.set_title(title)
+        ax.set_xlabel(f"{metric_label}: mean across all datasets")
         ax.grid(axis="x", alpha=0.25)
         if log_scale:
             ax.set_xscale("log")
@@ -347,11 +262,11 @@ def plot_overall(overall: pd.DataFrame, output_path: Path, log_scale: bool) -> N
             ax.set_xlim(right=max_value * 1.18)
 
     legend_handles = [
-        Patch(facecolor=GROUP_COLORS[group], label=GROUP_LABELS[group])
-        for group in GROUP_ORDER
+        Patch(facecolor=FAMILY_COLORS[group], label=FAMILY_LABELS[group])
+        for group in FAMILY_ORDER
     ]
-    fig.legend(handles=legend_handles, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.02))
-    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    fig.legend(handles=legend_handles, loc="lower center", ncol=3, fontsize=8, frameon=False, bbox_to_anchor=(0.5, -0.02))
+    fig.tight_layout(rect=(0, 0.09, 1, 1))
     save_figure(fig, output_path)
     plt.close(fig)
 
@@ -383,7 +298,7 @@ def main():
     parser = argparse.ArgumentParser(description="Plota MAE item-level e MAE agregado por soma.")
     parser.add_argument("--data-dir", type=str, default="data/datasets")
     parser.add_argument("--predictions-dir", type=str, default="data/predictions")
-    parser.add_argument("--output-dir", type=str, default="data/analysis/plots")
+    parser.add_argument("--output-dir", type=str, default="data/analysis/accuracy/item_sum_mae")
     parser.add_argument("--models", nargs="+", default=None)
     parser.add_argument("--linear-scale", action="store_true", help="Usa escala linear em vez de log.")
     args = parser.parse_args()

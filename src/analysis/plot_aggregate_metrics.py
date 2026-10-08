@@ -8,58 +8,17 @@ import pandas as pd
 from matplotlib.patches import Patch
 from src.utils.data_loader import DataLoader, discover_datasets
 
+from src.analysis.model_style import (
+    FAMILY_COLORS,
+    FAMILY_LABELS,
+    FAMILY_ORDER,
+    model_color,
+    model_family,
+    pretty_model_name,
+)
+
 
 DEFAULT_METRICS = ["mae_mean"]
-
-PRETTY_MODEL_NAMES = {
-    "darts_naive_moving_average": "Moving Average",
-    "darts_arima": "ARIMA",
-    "darts_prophet": "Prophet",
-    "darts_randomforest": "Random Forest",
-    "darts_lightgbm": "LightGBM",
-    "darts_linear": "Linear Regression",
-    "darts_global_naive_aggregate": "Global Naive Aggregate",
-    "darts_global_naive_drift": "Global Naive Drift",
-    "darts_global_naive_seasonal": "Global Naive Seasonal",
-    "chronos-2": "Chronos-2",
-    "chronos-2-finetuned-lora": "Chronos-2 Fine-tuned (LoRA)",
-    "moirai2-small": "Moirai2-Small",
-    "sundial-base-128m": "Sundial Base 128M",
-    "darts_randomforest_topdown": "Random Forest Top-Down",
-    "darts_lightgbm_topdown": "LightGBM Top-Down",
-    "darts_linear_topdown": "Linear Regression Top-Down",
-    "darts_xgboost_topdown": "XGBoost Top-Down",
-}
-
-MODEL_GROUPS = {
-    "darts_naive_moving_average": "industry",
-    "darts_arima": "industry",
-    "darts_prophet": "industry",
-    "darts_linear": "classic_ml",
-    "darts_randomforest": "classic_ml",
-    "darts_lightgbm": "classic_ml",
-    "darts_global_naive_aggregate": "classic_ml",
-    "darts_global_naive_drift": "classic_ml",
-    "darts_global_naive_seasonal": "classic_ml",
-    "chronos-2": "foundation",
-    "chronos-2-finetuned-lora": "foundation",
-    "moirai2-small": "foundation",
-    "sundial-base-128m": "foundation",
-}
-
-GROUP_COLORS = {
-    "industry": "#4C78A8",
-    "classic_ml": "#F58518",
-    "foundation": "#54A24B",
-}
-
-GROUP_LABELS = {
-    "industry": "Indústria",
-    "classic_ml": "Clássicos IA",
-    "foundation": "Foundation Models",
-}
-
-GROUP_ORDER = ["classic_ml", "industry", "foundation"]
 
 
 def list_metric_files(metrics_dir: str):
@@ -70,51 +29,10 @@ def list_metric_files(metrics_dir: str):
 
 
 def model_name_from_file(path: Path) -> str:
-    return path.stem.replace("_all_datasets_metrics_agg", "").replace("_metrics_agg", "")
-
-
-def pretty_model_name(model_name: str) -> str:
-    if model_name in PRETTY_MODEL_NAMES:
-        return PRETTY_MODEL_NAMES[model_name]
-
-    normalized = model_name.lower()
-    if "naive_moving_average" in normalized:
-        return "Moving Average"
-    if "prophet" in normalized:
-        return "Prophet"
-    if "arima" in normalized:
-        return "ARIMA"
-    if "randomforest" in normalized:
-        return "Random Forest"
-    if "lightgbm" in normalized:
-        return "LightGBM"
-    if "xgboost" in normalized:
-        return "XGBoost"
-    if normalized.startswith("chronos-2-finetuned"):
-        return "Chronos-2 Fine-tuned (LoRA)"
-    if normalized.startswith("chronos"):
-        return "Chronos-2"
-    if normalized.startswith("moirai2"):
-        return "Moirai2-Small"
-    if normalized.startswith("sundial"):
-        return "Sundial Base 128M"
-    return model_name.replace("darts_", "").replace("_", " ").title()
-
-
-def model_group(model_name: str) -> str:
-    if model_name in MODEL_GROUPS:
-        return MODEL_GROUPS[model_name]
-
-    normalized = model_name.lower()
-    if any(token in normalized for token in ["moving_average", "arima", "prophet"]):
-        return "industry"
-    if any(token in normalized for token in ["chronos", "moirai", "sundial"]):
-        return "foundation"
-    return "classic_ml"
-
-
-def model_color(model_name: str) -> str:
-    return GROUP_COLORS[model_group(model_name)]
+    return (
+        path.stem.removesuffix("_all_datasets_predictions")
+        .removesuffix("_all_datasets_metrics_agg").removesuffix("_metrics_agg")
+    )
 
 
 def list_prediction_files(predictions_dir: str):
@@ -176,7 +94,7 @@ def load_all_metric_rows(metrics_dir: str, metrics: list[str]) -> pd.DataFrame:
                 "dataset": row["dataset"],
                 "model": model_name,
                 "pretty_model": pretty_model_name(model_name),
-                "group": model_group(model_name),
+                "group": model_family(model_name),
                 "color": model_color(model_name),
             }
             for metric in metrics:
@@ -214,7 +132,7 @@ def load_all_aggregate_only_rows(predictions_dir: str, data_dir: str, metrics: l
                 "dataset": dataset_name,
                 "model": model_name,
                 "pretty_model": pretty_model_name(model_name),
-                "group": model_group(model_name),
+                "group": model_family(model_name),
                 "color": model_color(model_name),
             }
             for metric in metrics:
@@ -259,9 +177,8 @@ def plot_dataset_panel(ax, df: pd.DataFrame, dataset_name: str, metric: str):
     )
 
     ax.barh(plot_df["pretty_model"], plot_df[metric], color=plot_df["color"])
-    title = "Todos os Datasets" if dataset_name == "ALL_DATASETS" else dataset_name
-    ax.set_title(title)
-    ax.set_xlabel(metric)
+    dataset_label = "Todos os Datasets" if dataset_name == "ALL_DATASETS" else dataset_name
+    ax.set_xlabel(f"{metric}\n{dataset_label}")
     ax.grid(axis="x", alpha=0.25)
 
 
@@ -286,30 +203,30 @@ def plot_metrics(df: pd.DataFrame, metrics: list[str], output_path: str):
         ax.axis("off")
 
     legend_handles = [
-        Patch(facecolor=GROUP_COLORS[group], label=GROUP_LABELS[group])
-        for group in GROUP_ORDER
+        Patch(facecolor=FAMILY_COLORS[group], label=FAMILY_LABELS[group])
+        for group in FAMILY_ORDER
     ]
 
-    fig.suptitle("Comparação Agregada por Dataset")
-    fig.legend(handles=legend_handles, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, 0.01))
-    fig.tight_layout(rect=(0, 0.05, 1, 0.97))
+    fig.legend(handles=legend_handles, loc="lower center", ncol=len(FAMILY_ORDER), frameon=False, bbox_to_anchor=(0.5, 0.01))
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
     fig.savefig(output_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Plota comparação horizontal de métricas agregadas.")
-    parser.add_argument("--metrics-dir", type=str, default="data/analysis/metrics", help="Diretório com arquivos *_metrics_agg.csv.")
+    parser.add_argument("--metrics-dir", type=str, default="data/analysis/accuracy/metrics", help="Diretório com arquivos *_metrics_agg.csv.")
     parser.add_argument("--predictions-dir", type=str, default="data/predictions", help="Diretório com arquivos *_predictions.parquet.")
     parser.add_argument("--data-dir", type=str, default="data/datasets", help="Diretório com os datasets reais.")
     parser.add_argument("--metrics", nargs="+", default=DEFAULT_METRICS, help="Métricas a plotar.")
     parser.add_argument("--aggregate-only", action="store_true", help="Gera apenas a versão usando a série total agregada.")
-    parser.add_argument("--output", type=str, default=None, help="Arquivo de saída PNG.")
+    parser.add_argument("--output", type=str, default=None, help="Arquivo de saída PDF.")
+    parser.add_argument("--output-dir", type=str, default="data/analysis/accuracy/aggregate")
     args = parser.parse_args()
 
     metrics = args.metrics
     metrics_label = "_".join(metrics)
-    output_dir = Path("data/analysis/plots")
+    output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     jobs = []
@@ -325,13 +242,13 @@ def main():
         if args.output is not None:
             output_base = Path(args.output)
             if len(jobs) == 1:
-                output_path = str(output_base)
+                output_path = str(output_base.with_suffix(".pdf"))
             else:
                 suffix = "_aggregate_only" if mode == "aggregate_only" else "_individual"
-                output_path = str(output_base.with_name(f"{output_base.stem}{suffix}{output_base.suffix or '.png'}"))
+                output_path = str(output_base.with_name(f"{output_base.stem}{suffix}.pdf"))
         else:
             suffix = "_aggregate_only" if mode == "aggregate_only" else ""
-            output_path = str(output_dir / f"comparison_all_datasets_and_panels_{metrics_label}{suffix}.png")
+            output_path = str(output_dir / f"comparison_all_datasets_and_panels_{metrics_label}{suffix}.pdf")
 
         plot_metrics(df, metrics, output_path)
         print(f"Gráfico salvo em: {output_path}")

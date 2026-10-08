@@ -5,48 +5,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import pandas as pd
 
+from src.analysis.model_style import model_color, model_marker, pretty_model_name
 from src.utils.data_loader import DataLoader, discover_datasets
-
-
-PRETTY_MODEL_NAMES = {
-    "darts_naive_moving_average": "Moving Average",
-    "darts_arima": "ARIMA",
-    "darts_prophet": "Prophet",
-    "darts_randomforest": "Random Forest",
-    "darts_lightgbm": "LightGBM",
-    "darts_linear": "Linear Regression",
-    "darts_global_naive_aggregate": "Global Naive Aggregate",
-    "darts_global_naive_drift": "Global Naive Drift",
-    "darts_global_naive_seasonal": "Global Naive Seasonal",
-    "chronos-2": "Chronos-2",
-    "chronos-2-finetuned-lora": "Chronos-2 Fine-tuned (LoRA)",
-    "moirai2-small": "Moirai2-Small",
-    "sundial-base-128m": "Sundial Base 128M",
-}
-
-MODEL_MARKERS = {
-    "darts_naive_moving_average": "o",
-    "darts_arima": "s",
-    "darts_prophet": "^",
-    "darts_randomforest": "D",
-    "darts_lightgbm": "P",
-    "darts_linear": "X",
-    "darts_global_naive_aggregate": "v",
-    "darts_global_naive_drift": "<",
-    "darts_global_naive_seasonal": ">",
-    "chronos-2": "h",
-    "chronos-2-finetuned-lora": "H",
-    "moirai2-small": "*",
-    "sundial-base-128m": "8",
-}
-
-
-def pretty_model_name(model_name: str) -> str:
-    return PRETTY_MODEL_NAMES.get(model_name, model_name.replace("darts_", "").replace("_", " ").title())
-
-
-def model_marker(model_name: str) -> str:
-    return MODEL_MARKERS.get(model_name, "o")
 
 
 def load_dataset_truth(data_dir: str, dataset_name: str):
@@ -111,12 +71,12 @@ def plot_aggregate(train_df: pd.DataFrame, test_df: pd.DataFrame, pred_frames: d
             pred_agg["timestamp"],
             pred_agg["q50"],
             label=pretty_model_name(model_name),
+            color=model_color(model_name),
             linewidth=1.8,
             marker=model_marker(model_name),
             markersize=6,
         )
 
-    plt.title("Soma das Séries")
     plt.xlabel("Timestamp")
     plt.ylabel("Valor")
     plt.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=3, frameon=False)
@@ -163,14 +123,14 @@ def plot_individual_series(
                     model_series["timestamp"],
                     model_series["q50"],
                     label=pretty_model_name(model_name),
+                    color=model_color(model_name),
                     linewidth=1.6,
                     marker=model_marker(model_name),
                     markersize=5,
                 )
 
-            plt.title(f"Série {series_id}")
             plt.xlabel("Timestamp")
-            plt.ylabel("Valor")
+            plt.ylabel(f"Valor — SKU {series_id}")
             plt.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=3, frameon=False)
             plt.grid(alpha=0.25)
             plt.tight_layout()
@@ -192,17 +152,17 @@ def plot_per_model_aggregate(test_df: pd.DataFrame, pred_frames: dict, output_di
             pred_agg["timestamp"],
             pred_agg["q50"],
             label=pretty_name,
+            color=model_color(model_name),
             linewidth=1.8,
             marker=model_marker(model_name),
             markersize=6,
         )
-        plt.title(f"Soma das Séries - {pretty_name}")
         plt.xlabel("Timestamp")
         plt.ylabel("Valor")
         plt.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=2, frameon=False)
         plt.grid(alpha=0.25)
         plt.tight_layout()
-        output_path = output_dir / f"{dataset_name}_{model_name}_aggregate.png"
+        output_path = output_dir / f"{dataset_name}_{model_name}_aggregate.pdf"
         plt.savefig(output_path, dpi=200, bbox_inches="tight")
         plt.close()
 
@@ -245,14 +205,14 @@ def plot_per_model_individual_series(
                         model_series["timestamp"],
                         model_series["q50"],
                         label=pretty_name,
+                        color=model_color(model_name),
                         linewidth=1.6,
                         marker=model_marker(model_name),
                         markersize=5,
                     )
 
-                plt.title(f"Série {series_id} - {pretty_name}")
                 plt.xlabel("Timestamp")
-                plt.ylabel("Valor")
+                plt.ylabel(f"Valor — SKU {series_id}")
                 plt.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=2, frameon=False)
                 plt.grid(alpha=0.25)
                 plt.tight_layout()
@@ -268,7 +228,7 @@ def main():
     parser.add_argument("--models", nargs="+", default=None, help="Modelos específicos a comparar.")
     parser.add_argument("--series", nargs="+", default=None, help="IDs específicos para plot individual.")
     parser.add_argument("--max-series", type=int, default=None, help="Limite de séries no PDF individual.")
-    parser.add_argument("--output-dir", type=str, default="data/analysis/plots", help="Diretório de saída.")
+    parser.add_argument("--output-dir", type=str, default="data/analysis/predictions", help="Diretório de saída.")
     parser.add_argument(
         "--per-model",
         action="store_true",
@@ -279,10 +239,10 @@ def main():
     train_df, test_df = load_dataset_truth(args.data_dir, args.dataset)
     pred_frames = load_predictions_for_dataset(args.predictions_dir, args.dataset, args.models)
 
-    output_dir = Path(args.output_dir)
+    output_dir = Path(args.output_dir) / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    aggregate_path = output_dir / f"{args.dataset}_aggregate_comparison.png"
+    aggregate_path = output_dir / f"{args.dataset}_aggregate_comparison.pdf"
     series_path = output_dir / f"{args.dataset}_individual_series.pdf"
 
     plot_aggregate(train_df, test_df, pred_frames, aggregate_path)

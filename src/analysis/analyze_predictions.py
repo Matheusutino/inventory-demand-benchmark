@@ -167,7 +167,7 @@ def main():
     parser.add_argument("--predictions-dir", type=str, default="data/predictions", help="Diretório com os parquets.")
     parser.add_argument("--data-dir", type=str, default="data/datasets", help="Diretório com os datasets.")
     parser.add_argument("--file", type=str, default=None, help="Arquivo específico de previsão dentro de predictions-dir.")
-    parser.add_argument("--output-dir", type=str, default="data/analysis/metrics", help="Diretório para salvar métricas.")
+    parser.add_argument("--output-dir", type=str, default="data/analysis/accuracy/metrics", help="Diretório para salvar métricas.")
     args = parser.parse_args()
 
     truth_df = load_ground_truth(args.data_dir)

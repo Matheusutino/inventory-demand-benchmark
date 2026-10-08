@@ -6,8 +6,7 @@ DATASET=""
 DATA_DIR="data/datasets"
 PREDICTIONS_DIR="data/predictions"
 ANALYSIS_DIR="data/analysis"
-METRICS_DIR="data/analysis/metrics"
-PLOTS_DIR="data/analysis/plots"
+METRICS_DIR=""
 PYTHON_BIN="${PYTHON_BIN:-}"
 FAIL_FAST=0
 EXCLUDES=()
@@ -22,11 +21,11 @@ Options:
   --data-dir DIR             Diretório dos datasets reais. Default: data/datasets
   --predictions-dir DIR      Diretório das predições parquet. Default: data/predictions
   --analysis-dir DIR         Diretório das métricas/análises. Default: data/analysis
-  --metrics-dir DIR          Diretório das métricas tradicionais. Default: data/analysis/metrics
-  --plots-dir DIR            Diretório dos plots. Default: data/analysis/plots
+  --metrics-dir DIR          Default: <analysis-dir>/accuracy/metrics
+  --plots-dir DIR            Alias de compatibilidade para --analysis-dir.
   --python BIN               Interpretador Python. Default: python
   --fail-fast                Para na primeira falha.
-  --exclude SCRIPT...        Pula scripts pelo nome, ex: analyze_loss_wins.py
+  --exclude SCRIPT...        Pula scripts pelo nome, ex: evaluate_inventory_framework.py
   -h, --help                 Mostra esta ajuda.
 EOF
 }
@@ -54,7 +53,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --plots-dir)
-      PLOTS_DIR="${2:-}"
+      ANALYSIS_DIR="${2:-}"
       shift 2
       ;;
     --python)
@@ -83,6 +82,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+METRICS_DIR="${METRICS_DIR:-$ANALYSIS_DIR/accuracy/metrics}"
 
 if [[ -z "$PYTHON_BIN" ]]; then
   if command -v python3 >/dev/null 2>&1; then
@@ -143,12 +144,20 @@ if ! should_skip "describe_datasets.py"; then
       --output-dir "$ANALYSIS_DIR/dataset"
 fi
 
+if ! should_skip "plot_dataset_overview.py"; then
+  run_cmd "src.analysis.plot_dataset_overview" \
+    "$PYTHON_BIN" -m src.analysis.plot_dataset_overview \
+      --data-dir "$DATA_DIR" \
+      --output-dir "$ANALYSIS_DIR/dataset/overview"
+fi
+
 if ! should_skip "plot_aggregate_metrics.py"; then
   run_cmd "src.analysis.plot_aggregate_metrics" \
     "$PYTHON_BIN" -m src.analysis.plot_aggregate_metrics \
       --metrics-dir "$METRICS_DIR" \
       --predictions-dir "$PREDICTIONS_DIR" \
-      --data-dir "$DATA_DIR"
+      --data-dir "$DATA_DIR" \
+      --output-dir "$ANALYSIS_DIR/accuracy/aggregate"
 fi
 
 if ! should_skip "plot_item_sum_mae.py"; then
@@ -156,7 +165,23 @@ if ! should_skip "plot_item_sum_mae.py"; then
     "$PYTHON_BIN" -m src.analysis.plot_item_sum_mae \
       --data-dir "$DATA_DIR" \
       --predictions-dir "$PREDICTIONS_DIR" \
-      --output-dir "$PLOTS_DIR"
+      --output-dir "$ANALYSIS_DIR/accuracy/item_sum_mae"
+fi
+
+if ! should_skip "plot_item_mae_by_horizon.py"; then
+  run_cmd "src.analysis.plot_item_mae_by_horizon" \
+    "$PYTHON_BIN" -m src.analysis.plot_item_mae_by_horizon \
+      --data-dir "$DATA_DIR" \
+      --predictions-dir "$PREDICTIONS_DIR" \
+      --output-dir "$ANALYSIS_DIR/accuracy/item_mae_by_horizon"
+fi
+
+if ! should_skip "analyze_sku_winners.py"; then
+  run_cmd "src.analysis.analyze_sku_winners" \
+    "$PYTHON_BIN" -m src.analysis.analyze_sku_winners \
+      --data-dir "$DATA_DIR" \
+      --predictions-dir "$PREDICTIONS_DIR" \
+      --output-dir "$ANALYSIS_DIR/accuracy/sku_winners"
 fi
 
 if ! should_skip "plot_horizon_degradation.py"; then
@@ -164,7 +189,7 @@ if ! should_skip "plot_horizon_degradation.py"; then
     "$PYTHON_BIN" -m src.analysis.plot_horizon_degradation \
       --data-dir "$DATA_DIR" \
       --predictions-dir "$PREDICTIONS_DIR" \
-      --output-dir "$PLOTS_DIR"
+      --output-dir "$ANALYSIS_DIR/diagnostics/horizon_degradation"
 fi
 
 if ! should_skip "plot_item_mae_vs_degradation.py"; then
@@ -172,48 +197,48 @@ if ! should_skip "plot_item_mae_vs_degradation.py"; then
     "$PYTHON_BIN" -m src.analysis.plot_item_mae_vs_degradation \
       --data-dir "$DATA_DIR" \
       --predictions-dir "$PREDICTIONS_DIR" \
-      --output-dir "$PLOTS_DIR"
+      --output-dir "$ANALYSIS_DIR/diagnostics/mae_vs_horizon"
 fi
 
-if ! should_skip "analyze_loss_wins.py"; then
-  run_cmd "src.analysis.analyze_loss_wins" \
-    "$PYTHON_BIN" -m src.analysis.analyze_loss_wins \
+if ! should_skip "evaluate_inventory_framework.py"; then
+  run_cmd "src.analysis.evaluate_inventory_framework" \
+    "$PYTHON_BIN" -m src.analysis.evaluate_inventory_framework \
       --data-dir "$DATA_DIR" \
       --predictions-dir "$PREDICTIONS_DIR" \
-      --output-dir "$ANALYSIS_DIR/loss_wins" \
-      --plots-dir "$PLOTS_DIR"
+      --output-dir "$ANALYSIS_DIR/framework/components" \
+      --wins-dir "$ANALYSIS_DIR/framework/wins"
+fi
+
+if ! should_skip "plot_inventory_component_rank_heatmap.py"; then
+  run_cmd "src.analysis.plot_inventory_component_rank_heatmap" \
+    "$PYTHON_BIN" -m src.analysis.plot_inventory_component_rank_heatmap \
+      --input "$ANALYSIS_DIR/framework/components/component_values.csv" \
+      --output-dir "$ANALYSIS_DIR/framework/ranks"
+fi
+
+if ! should_skip "analyze_framework_sensitivity.py"; then
+  run_cmd "src.analysis.analyze_framework_sensitivity" \
+    "$PYTHON_BIN" -m src.analysis.analyze_framework_sensitivity \
+      --data-dir "$DATA_DIR" \
+      --predictions-dir "$PREDICTIONS_DIR" \
+      --output-dir "$ANALYSIS_DIR/framework/sensitivity"
+fi
+
+if ! should_skip "analyze_component_concordance.py"; then
+  run_cmd "src.analysis.analyze_component_concordance" \
+    "$PYTHON_BIN" -m src.analysis.analyze_component_concordance \
+      --input "$ANALYSIS_DIR/framework/components/component_values.csv" \
+      --output-dir "$ANALYSIS_DIR/framework/concordance"
 fi
 
 if ! should_skip "cd_diagram.py"; then
-  run_cmd "src.analysis.cd_diagram" \
-    "$PYTHON_BIN" -m src.analysis.cd_diagram \
-      --data-dir "$DATA_DIR" \
-      --predictions-dir "$PREDICTIONS_DIR" \
-      --output-dir "$ANALYSIS_DIR/cd_diagram" \
-      --labels
-
   run_cmd "src.analysis.cd_diagram_mae" \
     "$PYTHON_BIN" -m src.analysis.cd_diagram \
       --score mae \
       --data-dir "$DATA_DIR" \
       --predictions-dir "$PREDICTIONS_DIR" \
-      --output-dir "$ANALYSIS_DIR/cd_diagram" \
+      --output-dir "$ANALYSIS_DIR/accuracy/cd_diagram" \
       --labels
-fi
-
-if ! should_skip "plot_dataset_rank_heatmap.py"; then
-  run_cmd "src.analysis.plot_dataset_rank_heatmap" \
-    "$PYTHON_BIN" -m src.analysis.plot_dataset_rank_heatmap \
-      --input "$ANALYSIS_DIR/cd_diagram/inventory_loss_cd_performance.csv" \
-      --output-dir "$PLOTS_DIR"
-fi
-
-if ! should_skip "plot_inventory_loss_panel_heatmap.py"; then
-  run_cmd "src.analysis.plot_inventory_loss_panel_heatmap" \
-    "$PYTHON_BIN" -m src.analysis.plot_inventory_loss_panel_heatmap \
-      --components "$ANALYSIS_DIR/cd_diagram/inventory_loss_cd_components_normalized.csv" \
-      --ranks "$ANALYSIS_DIR/cd_diagram/inventory_loss_cd_ranks.csv" \
-      --output-dir "$PLOTS_DIR"
 fi
 
 if [[ -n "$DATASET" ]] && ! should_skip "plot_dataset_predictions.py"; then
@@ -222,7 +247,7 @@ if [[ -n "$DATASET" ]] && ! should_skip "plot_dataset_predictions.py"; then
       --dataset "$DATASET" \
       --data-dir "$DATA_DIR" \
       --predictions-dir "$PREDICTIONS_DIR" \
-      --output-dir "$PLOTS_DIR"
+      --output-dir "$ANALYSIS_DIR/predictions"
 elif [[ -z "$DATASET" ]] && ! should_skip "plot_dataset_predictions.py"; then
   echo "- Pulando plot_dataset_predictions.py: requer --dataset"
 fi
